@@ -50,6 +50,24 @@ export async function runAgent({ dispute, ctx, merchant, onStep = () => {}, pace
   return { ...analysis, evidences, draft, model: anthropic ? MODEL : 'template', analyzedAt: new Date().toISOString() };
 }
 
+// Claude returns the draft through a forced tool call, so the reply is always
+// structured JSON the app can read (no parsing free text).
+const DRAFT_TOOL = {
+  name: 'submit_draft',
+  description: 'Return the drafted dispute response for the merchant to review.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string', description: 'One sentence for the merchant.' },
+      reasoning: { type: 'string', description: '2-4 sentences explaining the recommendation and the money trade-off.' },
+      response_notes: { type: 'string', description: "Statement for PayPal's dispute reviewer: factual, chronological, cites evidence, max 1500 characters." },
+      buyer_message: { type: 'string', description: 'Short, warm message the merchant could send the buyer, or an empty string.' },
+      risks: { type: 'array', items: { type: 'string' }, description: 'Weaknesses in the case or missing evidence.' },
+    },
+    required: ['summary', 'reasoning', 'response_notes', 'buyer_message', 'risks'],
+  },
+};
+
 async function llmDraft(dispute, ctx, merchant, analysis) {
   const facts = buildFacts(dispute, ctx, merchant, analysis);
   const system = `You are a dispute specialist helping a small merchant respond to PayPal disputes.
@@ -58,20 +76,24 @@ Rules:
 - If the facts show the buyer is right, say so plainly and recommend refunding. Honesty protects the merchant's account.
 - response_notes is read by a PayPal dispute reviewer: factual, chronological, cites evidence, max 1500 characters, no emotion, no blame.
 - buyer_message is a short, warm message the merchant could send the buyer (or empty string if not useful).
-Return ONLY a JSON object with keys: summary (one sentence for the merchant), reasoning (2-4 sentences explaining the recommendation and money trade-off), response_notes, buyer_message, risks (array of short strings: weaknesses in the case or missing evidence).`;
+Return your draft by calling the submit_draft tool.`;
 
   const msg = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 1500,
+    max_tokens: 3000,
     system,
+    tools: [DRAFT_TOOL],
+    tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
     messages: [{ role: 'user', content: `Case facts (JSON):\n${JSON.stringify(facts, null, 2)}` }],
   });
-  const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+  const call = msg.content.find((b) => b.type === 'tool_use' && b.name === DRAFT_TOOL.name);
+  if (!call) throw new Error(`Claude returned no draft (stop reason: ${msg.stop_reason})`);
+  if (msg.stop_reason === 'max_tokens') throw new Error('Claude ran out of space writing the draft');
+  const json = call.input || {};
   return {
     summary: String(json.summary || ''),
     reasoning: String(json.reasoning || ''),
-    response_notes: String(json.response_notes || ''),
+    response_notes: String(json.response_notes || '').slice(0, 2000),
     buyer_message: String(json.buyer_message || ''),
     risks: Array.isArray(json.risks) ? json.risks.map(String) : [],
   };
