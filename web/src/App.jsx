@@ -206,7 +206,7 @@ function useCountUp(target, ms = 700) {
 function CaseGrid({ rows, selectedId, onSelect }) {
   const gridRef = useRef();
   const cols = useMemo(() => [
-    { field: 'id', headerName: 'Case', width: 118, cellClass: 'mono-ish' },
+    { field: 'id', headerName: 'Case', width: 150, cellClass: 'mono-ish' },
     { field: 'reasonLabel', headerName: 'Claim', flex: 1, minWidth: 150, tooltipValueGetter: (p) => `${p.data.buyer} · ${p.data.item}` },
     { field: 'amount', headerName: 'Amount', width: 98, type: 'rightAligned', valueFormatter: (p) => usd(p.value), sort: 'desc' },
     {

@@ -58,9 +58,30 @@ export class Store {
     return d;
   }
 
+  // Find the store order behind a dispute. PayPal can identify the payment by
+  // capture ID, buyer-side ID or invoice number depending on how the dispute
+  // was opened, so try every ID it gives, then fall back to amount + item name.
   contextFor(dispute) {
-    const txn = dispute.disputed_transactions?.[0];
-    return this.context[txn?.seller_transaction_id] || this.context[txn?.invoice_number] || null;
+    const txns = dispute.disputed_transactions || [];
+    const ids = txns.flatMap((t) => [t.seller_transaction_id, t.buyer_transaction_id, t.invoice_number, t.custom]).filter(Boolean);
+    for (const id of ids) if (this.context[id]) return this.context[id];
+
+    const entries = Object.values(this.context);
+    const byOrder = entries.find((c) => ids.includes(c.order?.order_id) || ids.includes(c.order?.paypal_order_id));
+    if (byOrder) return byOrder;
+
+    const amount = Number(dispute.dispute_amount?.value || txns[0]?.gross_amount?.value || 0);
+    const names = txns.flatMap((t) => (t.items || []).map((i) => (i.item_name || i.item_description || '').toLowerCase())).filter(Boolean);
+    const likely = entries.filter((c) => {
+      const item = c.order?.items?.[0];
+      if (!item || Math.abs(Number(item.price) - amount) > 0.01) return false;
+      const title = (item.title || '').toLowerCase();
+      return !names.length || names.some((n) => title.includes(n) || n.includes(title.slice(0, 20)));
+    });
+    if (likely.length === 1) return likely[0];
+
+    if (this.mode === 'paypal') console.warn(`[DisputeShield] No store order for dispute ${dispute.dispute_id}. PayPal IDs: ${ids.join(', ') || 'none'}`);
+    return null;
   }
 
   // ---- Mock state transitions (demo mode mirrors PayPal's lifecycle) ----

@@ -60,7 +60,7 @@ export function analyzeCase(dispute, ctx, merchant) {
       need('Carrier + tracking number', tracking, tracking ? `${ship.carrier} ${tracking}` : 'No tracking on file');
       need('Delivery confirmation', delivered, delivered ? `Delivered ${fmt(ship.delivered)}` : 'Carrier shows no delivery scan');
       need('Signature on delivery', ship?.signed_by, ship?.signed_by ? `Signed by ${ship.signed_by}` : 'No signature');
-      need('Shipped to PayPal address', addrMatch, addrMatch ? 'Ship-to matches billing' : 'Address mismatch');
+      need('Shipped to PayPal address', addrMatch, !ctx?.order ? 'No store order linked' : addrMatch ? 'Ship-to matches billing' : 'Address mismatch');
       if (tracking) sig('Valid tracking number', true, 0.1, `${ship.carrier} ${tracking}`);
       sig('Carrier confirms delivery', delivered, 0.35, delivered ? `${days(ship.delivered)} days before dispute` : `Last scan: "${ship?.events?.at(-1)?.[0] ?? 'none'}"`);
       if (ship?.signed_by) sig('Signed proof of delivery', true, 0.15, ship.signed_by);
