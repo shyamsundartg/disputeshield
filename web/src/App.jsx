@@ -71,7 +71,9 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [r, s] = await Promise.all([api('/disputes'), api('/stats')]);
+      // Load the list first: in live mode it fetches from PayPal, and the totals are worked out from it.
+      const r = await api('/disputes');
+      const s = await api('/stats');
       setRows(r);
       setStats(s);
       setError(null);
@@ -123,6 +125,14 @@ export default function App() {
     setTriaging(false);
   };
 
+  const [checking, setChecking] = useState(false);
+  const checkPayPal = async () => {
+    setChecking(true);
+    await refresh();
+    setChecking(false);
+    notify('Checked PayPal for new disputes');
+  };
+
   const resetDemo = async () => {
     await api('/demo/reset', { method: 'POST' });
     setSelected(null);
@@ -157,6 +167,11 @@ export default function App() {
                   <span className="mode-dot" aria-hidden />
                   Demo data{config.ai ? ' with AI drafting' : ''}
                 </span>
+              )}
+              {source === 'sandbox' && (
+                <button className="ghost on-dark" onClick={checkPayPal} disabled={checking}>
+                  {checking ? <><span className="spinner" aria-hidden /> Checking PayPal</> : 'Check for new disputes'}
+                </button>
               )}
               {source === 'demo' && (
                 <button className="ghost on-dark" onClick={resetDemo}>Reset demo</button>
