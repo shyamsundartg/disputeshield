@@ -98,7 +98,7 @@ button:disabled { opacity: .55; cursor: default; }
 .banner button { padding: 6px 12px; font-size: 13px; }
 
 /* ---------- Layout ---------- */
-.split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(420px, 1fr); gap: 20px; align-items: start; margin-top: -64px; padding-bottom: 48px; position: relative; }
+.split { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(420px, 1fr); gap: 20px; align-items: start; margin-top: -64px; padding-bottom: 48px; position: relative; }
 .grid-wrap { background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow); overflow: hidden; }
 .grid { height: 600px; }
 .panel { background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow); min-height: 600px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; scrollbar-width: thin; }
@@ -307,3 +307,6 @@ button.link { background: none; border: 0; padding: 0; color: var(--blue); }
 .closed-card.waiting { background: #f3f6fd; border-color: #d5def6; }
 .closed-card.waiting .closed-head { color: var(--blue); }
 .closed-card .ghost { margin-top: 14px; }
+
+/* Claim wraps to two lines on narrow screens instead of being cut off */
+.ag-cell.wrap-cell { display: flex; align-items: center; line-height: 1.3; white-space: normal; word-break: normal; }

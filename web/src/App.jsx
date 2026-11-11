@@ -273,20 +273,20 @@ function useCountUp(target, ms = 700) {
 function CaseGrid({ rows, selectedId, onSelect, loading, loadingText, emptyText }) {
   const gridRef = useRef();
   const cols = useMemo(() => [
-    { field: 'id', headerName: 'Case', flex: 1.2, minWidth: 152, cellClass: 'mono-ish' },
-    { field: 'reasonLabel', headerName: 'Claim', flex: 1.3, minWidth: 100, tooltipValueGetter: (p) => `${p.data.buyer} · ${p.data.item}` },
-    { field: 'amount', headerName: 'Amount', width: 98, type: 'rightAligned', valueFormatter: (p) => usd(p.value), sort: 'desc' },
+    { field: 'id', headerName: 'Case', flex: 1, minWidth: 150, cellClass: 'mono-ish' },
+    { field: 'reasonLabel', headerName: 'Claim', flex: 1.6, minWidth: 96, wrapText: true, cellClass: 'wrap-cell', tooltipValueGetter: (p) => `${p.data.buyer} · ${p.data.item}` },
+    { field: 'amount', headerName: 'Amount', width: 106, type: 'rightAligned', valueFormatter: (p) => usd(p.value), sort: 'desc' },
     {
-      field: 'dueDate', headerName: 'Respond by', flex: 0.85, minWidth: 100,
+      field: 'dueDate', headerName: 'Time left', flex: 0.4, minWidth: 92,
       comparator: (a, b) => (a ? new Date(a) : Infinity) - (b ? new Date(b) : Infinity),
       cellRenderer: (p) => {
         if (p.data.status === 'RESOLVED' || !p.value) return <span className="muted">—</span>;
         const d = daysLeft(p.value);
-        return <span className={d <= 2 ? 'due urgent' : 'due'}>{d <= 0 ? 'Today' : d === 1 ? '1 day left' : `${d} days left`}</span>;
+        return <span className={d <= 2 ? 'due urgent' : 'due'}>{d <= 0 ? 'Today' : d === 1 ? '1 day' : `${d} days`}</span>;
       },
     },
     {
-      field: 'decision', headerName: 'Recommendation', flex: 1.25, minWidth: 144,
+      field: 'decision', headerName: 'Recommendation', flex: 0.6, minWidth: 166,
       comparator: (a, b, na, nb) => (na.data.winProbability ?? -1) - (nb.data.winProbability ?? -1),
       cellRenderer: (p) => (p.value ? (
         <span className="rec">
@@ -298,7 +298,7 @@ function CaseGrid({ rows, selectedId, onSelect, loading, loadingText, emptyText 
         : <span className="muted">Not analyzed</span>),
     },
     {
-      field: 'status', headerName: 'Status', flex: 0.95, minWidth: 104,
+      field: 'status', headerName: 'Status', flex: 0.6, minWidth: 128, wrapText: true, cellClass: 'wrap-cell',
       valueFormatter: (p) => (p.value === 'RESOLVED' ? outcomeLabel(p.data.outcome) : STATUS[p.value] || p.value),
       cellClassRules: { won: (p) => /SELLER/.test(p.data.outcome || ''), lost: (p) => /BUYER/.test(p.data.outcome || ''), settled: (p) => /PAYOUT/.test(p.data.outcome || '') },
     },
