@@ -286,3 +286,20 @@ button.link { background: none; border: 0; padding: 0; color: var(--blue); }
 .mode-dot.live { background: #34d399; box-shadow: 0 0 0 3px rgba(52, 211, 153, .2); }
 .viewonly-note { margin: 18px 0 0; max-width: 82ch; color: rgba(255, 255, 255, .72); font-size: 13.5px; padding-left: 12px; border-left: 2px solid #34d399; }
 .viewonly-inline { font-weight: 500 !important; color: var(--ink-2); }
+
+/* Closed case summary */
+.closed-card { margin-top: 20px; padding: 18px 20px; border-radius: var(--r-lg); border: 1px solid var(--line); background: #f8f9fb; }
+.closed-card.won { background: var(--fight-bg); border-color: var(--fight-line); }
+.closed-card.settled { background: var(--offer-bg); border-color: var(--offer-line); }
+.closed-card.lost { background: var(--accept-bg); border-color: var(--accept-line); }
+.closed-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+.closed-card.won .closed-head { color: var(--fight); }
+.closed-card.settled .closed-head { color: var(--offer); }
+.closed-card.lost .closed-head { color: var(--accept); }
+.closed-head span { font-size: 13px; font-weight: 500; color: var(--ink-2); letter-spacing: 0; }
+.closed-card p { margin: 8px 0 0; font-size: 14.5px; }
+.closed-card .closed-note { color: var(--ink-2); font-size: 13px; }
+
+/* Grid loading overlay */
+.grid-loading { display: inline-flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 14px; background: #fff; padding: 10px 16px; border-radius: 99px; box-shadow: var(--shadow); }
+.spinner.dark { color: var(--blue); }

@@ -68,6 +68,7 @@ export default function App() {
   const [error, setError] = useState(null);
 
   const [source, setSourceState] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
@@ -100,8 +101,9 @@ export default function App() {
     setRows([]);
     setStats(null);
     setSelected(null);
+    setLoading(true);
     api('/config').then(setConfig).catch((e) => setError(e.message));
-    refresh();
+    refresh().finally(() => setLoading(false));
   }, [source, refresh]);
 
   const switchSource = (next) => { if (next !== source) setSourceState(next); };
@@ -200,7 +202,9 @@ export default function App() {
 
       <main className="split">
         <section className="grid-wrap" aria-label="Disputes">
-          <CaseGrid rows={rows} selectedId={selected} onSelect={setSelected} />
+          <CaseGrid key={source || 'starting'} rows={rows} selectedId={selected} onSelect={setSelected} loading={loading}
+            loadingText={source === 'sandbox' ? 'Fetching your disputes from PayPal…' : 'Loading cases…'}
+            emptyText={source === 'sandbox' ? 'No disputes in your PayPal sandbox yet.' : 'No disputes yet.'} />
         </section>
         <section className="panel" aria-label="Case file">
           {selected ? (
@@ -260,14 +264,14 @@ function useCountUp(target, ms = 700) {
   return v;
 }
 
-function CaseGrid({ rows, selectedId, onSelect }) {
+function CaseGrid({ rows, selectedId, onSelect, loading, loadingText, emptyText }) {
   const gridRef = useRef();
   const cols = useMemo(() => [
-    { field: 'id', headerName: 'Case', width: 172, cellClass: 'mono-ish' },
-    { field: 'reasonLabel', headerName: 'Claim', flex: 1, minWidth: 150, tooltipValueGetter: (p) => `${p.data.buyer} · ${p.data.item}` },
+    { field: 'id', headerName: 'Case', flex: 1.2, minWidth: 152, cellClass: 'mono-ish' },
+    { field: 'reasonLabel', headerName: 'Claim', flex: 1.3, minWidth: 100, tooltipValueGetter: (p) => `${p.data.buyer} · ${p.data.item}` },
     { field: 'amount', headerName: 'Amount', width: 98, type: 'rightAligned', valueFormatter: (p) => usd(p.value), sort: 'desc' },
     {
-      field: 'dueDate', headerName: 'Respond by', width: 118,
+      field: 'dueDate', headerName: 'Respond by', flex: 0.85, minWidth: 100,
       comparator: (a, b) => (a ? new Date(a) : Infinity) - (b ? new Date(b) : Infinity),
       cellRenderer: (p) => {
         if (p.data.status === 'RESOLVED' || !p.value) return <span className="muted">—</span>;
@@ -276,7 +280,7 @@ function CaseGrid({ rows, selectedId, onSelect }) {
       },
     },
     {
-      field: 'decision', headerName: 'Recommendation', width: 178,
+      field: 'decision', headerName: 'Recommendation', flex: 1.25, minWidth: 144,
       comparator: (a, b, na, nb) => (na.data.winProbability ?? -1) - (nb.data.winProbability ?? -1),
       cellRenderer: (p) => (p.value ? (
         <span className="rec">
@@ -286,7 +290,7 @@ function CaseGrid({ rows, selectedId, onSelect }) {
       ) : p.data.status === 'RESOLVED' ? <span className="muted">—</span> : <span className="muted">Not analyzed</span>),
     },
     {
-      field: 'status', headerName: 'Status', width: 132,
+      field: 'status', headerName: 'Status', flex: 0.95, minWidth: 104,
       valueFormatter: (p) => (p.value === 'RESOLVED' ? outcomeLabel(p.data.outcome) : STATUS[p.value] || p.value),
       cellClassRules: { won: (p) => /SELLER/.test(p.data.outcome || ''), lost: (p) => /BUYER/.test(p.data.outcome || ''), settled: (p) => /PAYOUT/.test(p.data.outcome || '') },
     },
@@ -311,7 +315,9 @@ function CaseGrid({ rows, selectedId, onSelect }) {
         getRowClass={(p) => (p.data.status === 'RESOLVED' ? 'row-closed' : '')}
         defaultColDef={{ sortable: true, resizable: true }}
         tooltipShowDelay={300}
-        overlayNoRowsTemplate={'<span style="color:#5d667a">No disputes yet. Create a test payment on the right, then dispute it as the buyer.</span>'}
+        loading={loading}
+        overlayLoadingTemplate={`<span class="grid-loading"><span class="spinner dark"></span>${loadingText}</span>`}
+        overlayNoRowsTemplate={`<span style="color:#5d667a">${emptyText}</span>`}
         suppressCellFocus
         animateRows
       />
@@ -519,7 +525,9 @@ function CaseFile({ id, onChange, notify, readOnly }) {
         </blockquote>
       )}
 
-      {!a && !running && (
+      {!a && !running && resolved && <ClosedSummary row={row} dispute={dispute} />}
+
+      {!a && !running && !resolved && (
         <div className="cta-block">
           <p>The agent will pull this order's tracking, refunds and messages{context ? '' : ' (no store order is linked to this PayPal transaction yet, so it will work from the dispute alone)'}, check them against what PayPal needs for this claim, and draft your response.</p>
           <button className="primary big" onClick={analyze}>Build the case</button>
@@ -726,5 +734,31 @@ function DecisionIcon({ kind }) {
   }
   return (
     <svg viewBox="0 0 24 24" width="22" height="22"><path d="M9 7 4.5 11.5 9 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 11.5h9.5a5 5 0 0 1 0 10H12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>
+  );
+}
+
+// What happened to a closed dispute, instead of offering to build a case that's already decided.
+function ClosedSummary({ row, dispute }) {
+  const refunded = Number(dispute.outcome?.amount_refunded?.value || 0);
+  const when = dispute.update_time ? new Date(dispute.update_time).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+  let tone = 'lost';
+  let headline = 'Closed';
+  let detail = 'PayPal closed this dispute.';
+  if (/SELLER/.test(row.outcome || '')) {
+    tone = 'won'; headline = 'Won';
+    detail = `PayPal decided in your favour, so you kept ${usd(row.amount, 2)}.`;
+  } else if (/PAYOUT/.test(row.outcome || '')) {
+    tone = 'settled'; headline = 'Settled';
+    detail = `Resolved with a partial refund of ${usd(refunded, 2)}; you kept ${usd(row.amount - refunded, 2)}.`;
+  } else if (/BUYER/.test(row.outcome || '')) {
+    headline = 'Refunded';
+    detail = `The buyer was refunded ${usd(refunded || row.amount, 2)}.`;
+  }
+  return (
+    <section className={`closed-card ${tone}`}>
+      <div className="closed-head">{headline}{when && <span>Closed {when}</span>}</div>
+      <p>{detail}</p>
+      <p className="closed-note">There's nothing left to respond to. Closed cases count towards your win rate at the top.</p>
+    </section>
   );
 }
