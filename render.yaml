@@ -1,5 +1,6 @@
 # One-click deploy on Render's free plan (Blueprint).
-# Runs in demo mode: no PayPal or AI keys are stored on the server.
+# Opens on demo data. If PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET are added in the
+# Render dashboard, a "Live PayPal sandbox" switch appears, view-only for visitors.
 services:
   - type: web
     name: disputeshield
@@ -12,4 +13,6 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: DEMO_MODE
+        value: "true"
+      - key: LIVE_READ_ONLY
         value: "true"

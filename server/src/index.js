@@ -13,11 +13,30 @@ import { SCENARIOS, createOrder, captureOrder, listTestPayments } from './sandbo
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const store = new Store();
+// Two data sources, picked per request: built-in demo data, and the live PayPal sandbox.
+const hasLive = !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+const stores = { demo: new Store({ mode: 'demo' }) };
+if (hasLive) stores.sandbox = new Store({ mode: 'paypal' });
+const DEFAULT_SOURCE = hasLive && process.env.DEMO_MODE === 'false' ? 'sandbox' : 'demo';
+// On the public demo the live sandbox is view-only, so judges can't use up real test disputes.
+// Defaults to on when hosted on Render (which sets RENDER=true); set LIVE_READ_ONLY=false to override.
+const LIVE_READ_ONLY = process.env.LIVE_READ_ONLY === 'true' || (process.env.LIVE_READ_ONLY !== 'false' && process.env.RENDER === 'true');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+app.use('/api', (req, res, next) => {
+  const want = req.get('x-data-source') || req.query.source;
+  req.source = stores[want] ? want : DEFAULT_SOURCE;
+  req.store = stores[req.source];
+  next();
+});
+const writable = (req, res, next) => {
+  if (LIVE_READ_ONLY && req.store.mode === 'paypal') {
+    return res.status(403).json({ error: 'The live PayPal sandbox is view-only on this public demo. Switch to Demo data to try submitting.' });
+  }
+  next();
+};
 
 const wrap = (fn) => (req, res) => fn(req, res).catch((e) => {
   console.error(e);
@@ -27,13 +46,13 @@ const wrap = (fn) => (req, res) => fn(req, res).catch((e) => {
 const OPEN = (d) => d.status !== 'RESOLVED';
 const amountOf = (d) => Number(d.dispute_amount?.value || 0);
 
-function row(d) {
+function row(store, d) {
   const a = store.analyses.get(d.dispute_id);
   const txn = d.disputed_transactions?.[0] || {};
   return {
     id: d.dispute_id,
     buyer: txn.buyer?.name || '—',
-    item: txn.items?.[0]?.item_description || '—',
+    item: txn.items?.[0]?.item_description || txn.items?.[0]?.item_name || store.contextFor(d)?.order?.items?.[0]?.title || '—',
     reason: d.reason,
     reasonLabel: REASON_LABELS[d.reason] || d.reason,
     amount: amountOf(d),
@@ -52,15 +71,21 @@ function row(d) {
 
 // ---------- API ----------
 app.get('/api/config', (req, res) => {
-  res.json({ mode: store.mode, ai: aiEnabled(), model: process.env.AI_MODEL || 'claude-sonnet-5-5', merchant: store.merchant, env: process.env.PAYPAL_ENV || 'sandbox' });
+  res.json({
+    mode: req.store.mode, source: req.source, sources: Object.keys(stores), defaultSource: DEFAULT_SOURCE,
+    readOnly: LIVE_READ_ONLY && req.store.mode === 'paypal', liveReadOnly: LIVE_READ_ONLY,
+    ai: aiEnabled(), model: process.env.AI_MODEL || 'claude-sonnet-5-5', merchant: req.store.merchant, env: process.env.PAYPAL_ENV || 'sandbox',
+  });
 });
 
 app.get('/api/disputes', wrap(async (req, res) => {
+  const store = req.store;
   const list = await store.list();
-  res.json(list.map(row));
+  res.json(list.map((d) => row(store, d)));
 }));
 
 app.get('/api/stats', wrap(async (req, res) => {
+  const store = req.store;
   const list = [...store.disputes.values()];
   const open = list.filter(OPEN);
   const resolved = list.filter((d) => !OPEN(d) && /FAVOU?R/.test(d.outcome?.outcome_code || ''));
@@ -79,9 +104,10 @@ app.get('/api/stats', wrap(async (req, res) => {
 }));
 
 app.get('/api/disputes/:id', wrap(async (req, res) => {
+  const store = req.store;
   const d = await store.get(req.params.id);
   res.json({
-    row: row(d),
+    row: row(store, d),
     dispute: d,
     context: store.contextFor(d),
     analysis: store.analyses.get(d.dispute_id) || null,
@@ -92,6 +118,7 @@ app.get('/api/disputes/:id', wrap(async (req, res) => {
 
 // Live agent run, streamed as Server-Sent Events.
 app.get('/api/disputes/:id/analyze', wrap(async (req, res) => {
+  const store = req.store;
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   try {
@@ -111,6 +138,7 @@ app.get('/api/disputes/:id/analyze', wrap(async (req, res) => {
 
 // Triage every open dispute at once (autopilot).
 app.post('/api/triage', wrap(async (req, res) => {
+  const store = req.store;
   const open = (await store.list()).filter(OPEN).filter((d) => !store.analyses.has(d.dispute_id));
   const results = await Promise.all(open.map(async (d) => {
     const r = await runAgent({ dispute: d, ctx: store.contextFor(d), merchant: store.merchant, pace: 0 });
@@ -123,6 +151,7 @@ app.post('/api/triage', wrap(async (req, res) => {
 
 // Merchant edits to the draft before submitting.
 app.patch('/api/disputes/:id/draft', wrap(async (req, res) => {
+  const store = req.store;
   const a = store.analyses.get(req.params.id);
   if (!a) return res.status(400).json({ error: 'Analyze first' });
   if (req.body.response_notes != null) {
@@ -133,7 +162,8 @@ app.patch('/api/disputes/:id/draft', wrap(async (req, res) => {
   res.json(a);
 }));
 
-app.post('/api/disputes/:id/documents', upload.array('files', 5), wrap(async (req, res) => {
+app.post('/api/disputes/:id/documents', writable, upload.array('files', 5), wrap(async (req, res) => {
+  const store = req.store;
   const list = store.documents.get(req.params.id) || [];
   for (const f of req.files || []) list.push({ name: f.originalname, buffer: f.buffer, contentType: f.mimetype });
   store.documents.set(req.params.id, list);
@@ -142,6 +172,7 @@ app.post('/api/disputes/:id/documents', upload.array('files', 5), wrap(async (re
 }));
 
 app.get('/api/disputes/:id/evidence.pdf', wrap(async (req, res) => {
+  const store = req.store;
   const d = await store.get(req.params.id);
   const a = store.analyses.get(d.dispute_id);
   if (!a) return res.status(400).json({ error: 'Analyze first' });
@@ -152,7 +183,8 @@ app.get('/api/disputes/:id/evidence.pdf', wrap(async (req, res) => {
 }));
 
 // Execute the merchant-approved decision against PayPal.
-app.post('/api/disputes/:id/submit', wrap(async (req, res) => {
+app.post('/api/disputes/:id/submit', writable, wrap(async (req, res) => {
+  const store = req.store;
   const d = await store.get(req.params.id);
   const a = store.analyses.get(d.dispute_id);
   if (!a) return res.status(400).json({ error: 'Analyze first' });
@@ -183,11 +215,12 @@ app.post('/api/disputes/:id/submit', wrap(async (req, res) => {
 
   a.submitted = { action, at: new Date().toISOString() };
   store.log(d.dispute_id, `SUBMITTED_${action}`, detail);
-  res.json({ ok: true, detail, row: row(store.disputes.get(d.dispute_id)) });
+  res.json({ ok: true, detail, row: row(store, store.disputes.get(d.dispute_id)) });
 }));
 
 // Sandbox / demo helper: let "PayPal" decide the case so the demo can end.
-app.post('/api/disputes/:id/simulate-decision', wrap(async (req, res) => {
+app.post('/api/disputes/:id/simulate-decision', writable, wrap(async (req, res) => {
+  const store = req.store;
   const d = await store.get(req.params.id);
   const a = store.analyses.get(d.dispute_id);
   const outcome = req.body.outcome || ((a?.winProbability ?? 0.5) >= 0.5 ? 'SELLER_FAVOR' : 'BUYER_FAVOR');
@@ -201,47 +234,51 @@ app.post('/api/disputes/:id/simulate-decision', wrap(async (req, res) => {
     }
   }
   store.log(d.dispute_id, 'DECIDED', outcome);
-  res.json({ ok: true, row: row(store.disputes.get(d.dispute_id)) });
+  res.json({ ok: true, row: row(store, store.disputes.get(d.dispute_id)) });
 }));
 
 // Sandbox helper: move a dispute from UNDER_REVIEW to waiting-for-seller.
-app.post('/api/disputes/:id/require-evidence', wrap(async (req, res) => {
+app.post('/api/disputes/:id/require-evidence', writable, wrap(async (req, res) => {
+  const store = req.store;
   if (store.mode !== 'paypal') return res.json({ ok: true, note: 'demo mode — nothing to do' });
   await store.paypal.requireEvidence(req.params.id, 'SELLER_EVIDENCE');
   res.json({ ok: true });
 }));
 
 app.post('/api/demo/reset', (req, res) => {
-  if (store.mode === 'demo') store.resetDemo();
+  stores.demo.resetDemo();
   res.json({ ok: true });
 });
 
-app.get('/api/activity', (req, res) => res.json(store.activity));
+app.get('/api/activity', (req, res) => res.json(req.store.activity));
 
 // ---------- Sandbox test data ----------
 const needSandbox = (res) => {
-  if (store.mode !== 'paypal') { res.status(400).json({ error: 'Test payments need PayPal sandbox keys in server/.env and DEMO_MODE=false.' }); return false; }
+  if (!stores.sandbox) { res.status(400).json({ error: 'Test payments need PayPal sandbox keys in server/.env.' }); return false; }
+  if (LIVE_READ_ONLY) { res.status(403).json({ error: 'Test payments are turned off on the public demo.' }); return false; }
   if ((process.env.PAYPAL_ENV || 'sandbox') !== 'sandbox') { res.status(400).json({ error: 'Test payments only work in the PayPal sandbox.' }); return false; }
   return true;
 };
 
 app.get('/api/sandbox/scenarios', (req, res) => {
-  res.json({ scenarios: Object.entries(SCENARIOS).map(([id, s]) => ({ id, label: s.label, price: s.product.price, item: s.product.title })), payments: listTestPayments(store) });
+  res.json({ scenarios: Object.entries(SCENARIOS).map(([id, s]) => ({ id, label: s.label, price: s.product.price, item: s.product.title })), payments: stores.sandbox ? listTestPayments(stores.sandbox) : [] });
 });
 
-app.post('/api/sandbox/test-payment', wrap(async (req, res) => {
+app.post('/api/sandbox/test-payment', writable, wrap(async (req, res) => {
+  const store = req.store;
   if (!needSandbox(res)) return;
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  res.json(await createOrder(store.paypal, { scenario: req.body?.scenario, baseUrl }));
+  res.json(await createOrder(stores.sandbox.paypal, { scenario: req.body?.scenario, baseUrl }));
 }));
 
 // PayPal sends the buyer back here after they approve the payment.
 app.get('/api/sandbox/return', wrap(async (req, res) => {
+  const store = req.store;
   if (!needSandbox(res)) return;
   const back = process.env.WEB_URL || '/';
   try {
-    const r = await captureOrder(store.paypal, store, req.query.token);
-    res.redirect(`${back}?sandbox=paid&txn=${encodeURIComponent(r.transactionId)}`);
+    const r = await captureOrder(stores.sandbox.paypal, stores.sandbox, req.query.token);
+    res.redirect(`${back}?source=sandbox&sandbox=paid&txn=${encodeURIComponent(r.transactionId)}`);
   } catch (e) {
     res.redirect(`${back}?sandbox=error&msg=${encodeURIComponent(e.message)}`);
   }
@@ -250,18 +287,21 @@ app.get('/api/sandbox/return', wrap(async (req, res) => {
 // PayPal webhook: auto-analyze new disputes the moment they arrive.
 // Subscribe your app to CUSTOMER.DISPUTE.CREATED / CUSTOMER.DISPUTE.UPDATED.
 app.post('/api/webhooks/paypal', wrap(async (req, res) => {
+  const store = req.store;
   const ev = req.body || {};
   const id = ev.resource?.dispute_id;
   res.json({ received: true });
+  if (!stores.sandbox) return;
+  const live = stores.sandbox;
   if (!id || !/CUSTOMER\.DISPUTE\.(CREATED|UPDATED)/.test(ev.event_type || '')) return;
-  if (store.mode === 'paypal' && process.env.PAYPAL_WEBHOOK_ID && !(await verifyWebhook(req))) {
+  if (process.env.PAYPAL_WEBHOOK_ID && !(await verifyWebhook(req))) {
     console.warn('Webhook signature verification failed');
     return;
   }
-  const d = await store.get(id);
-  const r = await runAgent({ dispute: d, ctx: store.contextFor(d), merchant: store.merchant, pace: 0 });
-  store.analyses.set(id, r);
-  store.log(id, 'AUTO_ANALYZED', `Webhook ${ev.event_type} → ${r.decision}`);
+  const d = await live.get(id);
+  const r = await runAgent({ dispute: d, ctx: live.contextFor(d), merchant: live.merchant, pace: 0 });
+  live.analyses.set(id, r);
+  live.log(id, 'AUTO_ANALYZED', `Webhook ${ev.event_type} → ${r.decision}`);
 }));
 
 async function verifyWebhook(req) {
@@ -271,7 +311,7 @@ async function verifyWebhook(req) {
     transmission_sig: h['paypal-transmission-sig'], transmission_time: h['paypal-transmission-time'],
     webhook_id: process.env.PAYPAL_WEBHOOK_ID, webhook_event: req.body,
   };
-  const r = await store.paypal.req('POST', '/v1/notifications/verify-webhook-signature', { json: body });
+  const r = await stores.sandbox.paypal.req('POST', '/v1/notifications/verify-webhook-signature', { json: body });
   return r.verification_status === 'SUCCESS';
 }
 
@@ -284,5 +324,5 @@ if (fs.existsSync(dist)) {
 
 const PORT = Number(process.env.PORT || 8787);
 app.listen(PORT, () => {
-  console.log(`DisputeShield API on http://localhost:${PORT} · mode=${store.mode} · ai=${aiEnabled() ? 'on' : 'template'}`);
+  console.log(`DisputeShield API on http://localhost:${PORT} · sources=${Object.keys(stores).join('+')} (default ${DEFAULT_SOURCE})${LIVE_READ_ONLY ? ' · live view-only' : ''} · ai=${aiEnabled() ? 'on' : 'template'}`);
 });

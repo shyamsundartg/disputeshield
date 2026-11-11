@@ -19,6 +19,7 @@ Built by WorkAxis (Chennai) for the PayPal AI Hackathon 2026.
 - **Autopilot.** A webhook (`CUSTOMER.DISPUTE.CREATED` / `UPDATED`) analyzes new disputes the moment PayPal sends them, and "Analyze all open cases" triages the whole queue.
 - **AG Grid dashboard.** Money at risk, deadlines, recommendations and win chance for every case.
 - **Audit trail.** Every analysis and action is logged per case.
+- **Demo / Live PayPal sandbox switch.** With PayPal keys set, the header lets you flip between the built-in demo cases and real disputes in the PayPal sandbox. On the public demo the live view is read-only (`LIVE_READ_ONLY`), so visitors can run the agent but can't change the sandbox.
 
 ## Run it
 
@@ -49,7 +50,7 @@ Set `ANTHROPIC_API_KEY` in `server/.env`. Without it, a deterministic template w
 
 ## Deploy (free)
 
-The repo includes a `render.yaml` blueprint. On [Render](https://render.com), choose **New → Blueprint**, pick this repo and click **Apply**. It deploys on the free plan in demo mode, so no keys are stored online. Free services sleep when idle, so the first visit after a quiet period can take up to a minute to load.
+The repo includes a `render.yaml` blueprint. On [Render](https://render.com), choose **New → Blueprint**, pick this repo and click **Apply**. It deploys on the free plan and opens on demo data. To also show your live sandbox disputes, add `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` under the service's **Environment** tab; the live view stays read-only for visitors. Free services sleep when idle, so the first visit after a quiet period can take up to a minute to load.
 
 ## How it's built
 

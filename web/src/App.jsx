@@ -2,8 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { themeQuartz } from 'ag-grid-community';
 
+// Which data the app shows: 'demo' (built-in cases) or 'sandbox' (live PayPal sandbox).
+let SOURCE = null;
+const sourceQS = () => (SOURCE ? `source=${SOURCE}` : '');
+const withSource = (url) => (SOURCE ? `${url}${url.includes('?') ? '&' : '?'}${sourceQS()}` : url);
+
 const api = (path, opts = {}) =>
-  fetch(`/api${path}`, { headers: { 'Content-Type': 'application/json' }, ...opts }).then(async (r) => {
+  fetch(`/api${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(SOURCE ? { 'X-Data-Source': SOURCE } : {}), ...(opts.headers || {}) } }).then(async (r) => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || (r.status >= 500 && !j.error ? "The DisputeShield server isn't responding. Check the terminal where you ran npm start." : `Request failed (${r.status})`));
     return j;
@@ -62,6 +67,8 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [error, setError] = useState(null);
 
+  const [source, setSourceState] = useState(null);
+
   const refresh = useCallback(async () => {
     try {
       const [r, s] = await Promise.all([api('/disputes'), api('/stats')]);
@@ -73,10 +80,31 @@ export default function App() {
     }
   }, []);
 
+  // Pick the starting source: a ?source= link (PayPal's return), then the last one used, then the server default.
   useEffect(() => {
+    api('/config').then((c) => {
+      let start = new URLSearchParams(window.location.search).get('source');
+      if (!start) { try { start = localStorage.getItem('ds-source'); } catch { /* storage unavailable */ } }
+      if (!c.sources.includes(start)) start = c.defaultSource;
+      SOURCE = start;
+      setSourceState(start);
+    }).catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    if (!source) return;
+    SOURCE = source;
+    try { localStorage.setItem('ds-source', source); } catch { /* storage unavailable */ }
+    setRows([]);
+    setStats(null);
+    setSelected(null);
     api('/config').then(setConfig).catch((e) => setError(e.message));
     refresh();
-  }, [refresh]);
+  }, [source, refresh]);
+
+  const switchSource = (next) => { if (next !== source) setSourceState(next); };
+  const readOnly = !!config?.readOnly;
+  const hasLive = config?.sources?.includes('sandbox');
 
   const notify = (msg) => {
     setToast(msg);
@@ -114,14 +142,23 @@ export default function App() {
               </div>
             </div>
             <div className="top-actions">
-              {config && (
-                <span className={`mode ${config.mode}`} title={config.mode === 'demo' ? 'Using built-in demo data' : `Connected to PayPal ${config.env}`}>
+              {config && hasLive && (
+                <div className="source-switch" role="radiogroup" aria-label="Data shown">
+                  <button role="radio" aria-checked={source === 'demo'} className={source === 'demo' ? 'on' : ''} onClick={() => switchSource('demo')}>
+                    Demo data
+                  </button>
+                  <button role="radio" aria-checked={source === 'sandbox'} className={source === 'sandbox' ? 'on' : ''} onClick={() => switchSource('sandbox')}>
+                    <span className="mode-dot live" aria-hidden />Live PayPal {config.env}
+                  </button>
+                </div>
+              )}
+              {config && !hasLive && (
+                <span className={`mode ${config.mode}`} title="Using built-in demo data">
                   <span className="mode-dot" aria-hidden />
-                  {config.mode === 'demo' ? 'Demo data' : `PayPal ${config.env}`}
-                  {config.ai ? ' with AI drafting' : ' with template drafting'}
+                  Demo data{config.ai ? ' with AI drafting' : ''}
                 </span>
               )}
-              {config?.mode === 'demo' && (
+              {source === 'demo' && (
                 <button className="ghost on-dark" onClick={resetDemo}>Reset demo</button>
               )}
               <button className="primary on-dark" onClick={triage} disabled={triaging}>
@@ -129,6 +166,11 @@ export default function App() {
               </button>
             </div>
           </header>
+          {readOnly && (
+            <p className="viewonly-note">
+              These are real disputes in our PayPal sandbox. You can run the agent on them, but submitting is turned off here so every visitor sees the same cases. Switch to Demo data to try the full flow.
+            </p>
+          )}
           <Stats stats={stats} />
           {error && (
             <div className="banner" role="alert">
@@ -147,9 +189,9 @@ export default function App() {
         </section>
         <section className="panel" aria-label="Case file">
           {selected ? (
-            <CaseFile key={selected} id={selected} onChange={refresh} notify={notify} />
+            <CaseFile key={`${source}-${selected}`} id={selected} onChange={refresh} notify={notify} readOnly={readOnly} />
           ) : (
-            <Empty rows={rows} onPick={setSelected} sandbox={config?.mode === 'paypal' && config?.env === 'sandbox'} onRefresh={refresh} notify={notify} />
+            <Empty rows={rows} onPick={setSelected} sandbox={source === 'sandbox' && config?.env === 'sandbox' && !readOnly} onRefresh={refresh} notify={notify} />
           )}
         </section>
       </main>
@@ -206,7 +248,7 @@ function useCountUp(target, ms = 700) {
 function CaseGrid({ rows, selectedId, onSelect }) {
   const gridRef = useRef();
   const cols = useMemo(() => [
-    { field: 'id', headerName: 'Case', width: 150, cellClass: 'mono-ish' },
+    { field: 'id', headerName: 'Case', width: 172, cellClass: 'mono-ish' },
     { field: 'reasonLabel', headerName: 'Claim', flex: 1, minWidth: 150, tooltipValueGetter: (p) => `${p.data.buyer} · ${p.data.item}` },
     { field: 'amount', headerName: 'Amount', width: 98, type: 'rightAligned', valueFormatter: (p) => usd(p.value), sort: 'desc' },
     {
@@ -359,7 +401,7 @@ function TestData({ onRefresh, notify }) {
   );
 }
 
-function CaseFile({ id, onChange, notify }) {
+function CaseFile({ id, onChange, notify, readOnly }) {
   const [data, setData] = useState(null);
   const [steps, setSteps] = useState([]);
   const [running, setRunning] = useState(false);
@@ -382,7 +424,7 @@ function CaseFile({ id, onChange, notify }) {
     setSteps([]);
     setErr(null);
     setRunning(true);
-    const es = new EventSource(`/api/disputes/${id}/analyze`);
+    const es = new EventSource(withSource(`/api/disputes/${id}/analyze`));
     es.addEventListener('step', (e) => setSteps((s) => [...s, JSON.parse(e.data)]));
     es.addEventListener('result', async () => {
       es.close();
@@ -430,7 +472,7 @@ function CaseFile({ id, onChange, notify }) {
   const upload = async (files) => {
     const fd = new FormData();
     [...files].forEach((f) => fd.append('files', f));
-    await fetch(`/api/disputes/${id}/documents`, { method: 'POST', body: fd });
+    await fetch(withSource(`/api/disputes/${id}/documents`), { method: 'POST', body: fd });
     await load();
     notify(`Added ${files.length} file${files.length > 1 ? 's' : ''} to the evidence`);
   };
@@ -502,9 +544,9 @@ function CaseFile({ id, onChange, notify }) {
               <h3>Your response to PayPal <span className="hint">edit before sending</span></h3>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} rows={7} disabled={!!a.submitted} />
               <div className="files">
-                <a href={`/api/disputes/${id}/evidence.pdf`} target="_blank" rel="noreferrer">Preview evidence pack (PDF)</a>
+                <a href={withSource(`/api/disputes/${id}/evidence.pdf`)} target="_blank" rel="noreferrer">Preview evidence pack (PDF)</a>
                 {data.documents.map((f) => <span key={f.name} className="file">{f.name}</span>)}
-                {!a.submitted && (
+                {!a.submitted && !readOnly && (
                   <label className="link">
                     Add photos or documents
                     <input type="file" multiple hidden onChange={(e) => e.target.files.length && upload(e.target.files)} />
@@ -523,7 +565,12 @@ function CaseFile({ id, onChange, notify }) {
           {err && <p className="error">{err}</p>}
 
           <footer className="actions">
-            {!a.submitted && !resolved ? (
+            {readOnly ? (
+              <div className="submitted">
+                <p className="viewonly-inline">View-only: this is a live PayPal sandbox dispute, so submitting is turned off on the public demo.</p>
+                <button className="ghost" onClick={analyze} disabled={running}>Re-run analysis</button>
+              </div>
+            ) : !a.submitted && !resolved ? (
               <>
                 <button className={`primary big ${DECISION[a.decision].cls}`} onClick={() => act(a.decision)} disabled={busy}>
                   {busy ? 'Sending to PayPal…' : a.decision === 'OFFER' ? `Send ${usd(a.offer?.amount, 2)} offer` : a.decision === 'ACCEPT' ? `Refund ${usd(row.amount, 2)}` : DECISION[a.decision].verb}

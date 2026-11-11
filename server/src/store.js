@@ -9,13 +9,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', 'data');
 
 export class Store {
-  constructor() {
-    const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_ENV, DEMO_MODE } = process.env;
-    this.mode = PAYPAL_CLIENT_ID && PAYPAL_CLIENT_SECRET && DEMO_MODE !== 'true' ? 'paypal' : 'demo';
+  constructor({ mode = 'demo' } = {}) {
+    const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_ENV } = process.env;
+    this.mode = mode;
     this.paypal = this.mode === 'paypal' ? new PayPalClient({ clientId: PAYPAL_CLIENT_ID, clientSecret: PAYPAL_CLIENT_SECRET, env: PAYPAL_ENV || 'sandbox' }) : null;
     this.merchant = { ...MERCHANT, ...loadJson('merchant.json') };
     // Merchant context (orders, tracking, chats, refunds) keyed by PayPal seller_transaction_id.
-    this.context = this.mode === 'demo' ? MERCHANT_CONTEXT : loadJson('merchant-context.json') || {};
+    // sandbox-context.json ships with the repo (orders behind the team's sandbox test disputes);
+    // merchant-context.json holds test payments captured on this machine.
+    this.context = this.mode === 'demo' ? MERCHANT_CONTEXT : { ...loadJson('sandbox-context.json'), ...loadJson('merchant-context.json') };
     this.disputes = new Map(); // id -> dispute
     this.analyses = new Map(); // id -> agent result
     this.documents = new Map(); // id -> [{name, buffer, contentType}]

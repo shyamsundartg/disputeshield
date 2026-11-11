@@ -11,7 +11,7 @@ export class PayPalClient {
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     this.env = env;
-    this.base = BASES[env] || BASES.sandbox;
+    this.base = process.env.PAYPAL_API_BASE || BASES[env] || BASES.sandbox; // override only for local testing
     this._token = null;
     this._tokenExp = 0;
   }

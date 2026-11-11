@@ -1,0 +1,162 @@
+{
+  "52155983J2725364A": {
+    "scenario": "delivered",
+    "order": {
+      "order_id": "KL-327265",
+      "paypal_order_id": "03C67758RD949282P",
+      "placed": "2026-11-10T14:52:34.514Z",
+      "items": [
+        {
+          "title": "Kanchipuram pure silk saree – peacock blue",
+          "price": 34,
+          "cost": 15,
+          "description": "Handwoven pure silk with zari border.",
+          "listing_url": "https://kanchilooms.example/p/delivered"
+        }
+      ],
+      "ship_to": "2211 N First St, San Jose, CA, 95131, US",
+      "bill_to": "2211 N First St, San Jose, CA, 95131, US"
+    },
+    "shipping": {
+      "carrier": "DHL",
+      "tracking_number": "9756813774",
+      "shipped": "2026-11-10T14:52:34.514Z",
+      "delivered": "2026-11-10T14:52:34.514Z",
+      "signed_by": "JOHN DOE",
+      "events": [
+        [
+          "Shipment picked up – Chennai, IN",
+          0
+        ],
+        [
+          "Customs cleared",
+          0
+        ],
+        [
+          "Delivered – signed by JOHN DOE",
+          0
+        ]
+      ]
+    },
+    "customer": {
+      "previous_orders": 2,
+      "customer_since": "2026-04-24T14:52:34.514Z"
+    },
+    "comms": [
+      [
+        "CUSTOMER",
+        0,
+        "Thank you! Please ship by DHL Express."
+      ],
+      [
+        "MERCHANT",
+        0,
+        "Shipped today via DHL Express."
+      ]
+    ],
+    "refunds": [],
+    "risk": {
+      "ip_country": "US",
+      "device_seen_before": true,
+      "avs_match": true
+    }
+  },
+  "0L7811847H9812141": {
+    "scenario": "in_transit",
+    "order": {
+      "order_id": "KL-432760",
+      "paypal_order_id": "88M537061W187380E",
+      "placed": "2026-11-10T14:54:00.001Z",
+      "items": [
+        {
+          "title": "Cotton handloom table runner",
+          "price": 12,
+          "cost": 4,
+          "description": "Handloom cotton.",
+          "listing_url": "https://kanchilooms.example/p/in_transit"
+        }
+      ],
+      "ship_to": "2211 N First St, San Jose, CA, 95131, US",
+      "bill_to": "2211 N First St, San Jose, CA, 95131, US"
+    },
+    "shipping": {
+      "carrier": "India Post (registered)",
+      "tracking_number": "RR944485433IN",
+      "shipped": "2026-10-12T14:54:00.002Z",
+      "delivered": null,
+      "events": [
+        [
+          "Booked – Chennai GPO",
+          -29
+        ],
+        [
+          "Dispatched to destination country",
+          -26
+        ],
+        [
+          "In transit",
+          -26
+        ]
+      ]
+    },
+    "customer": {
+      "previous_orders": 0,
+      "customer_since": "2026-04-24T14:54:00.002Z"
+    },
+    "comms": [],
+    "refunds": []
+  },
+  "5XX4832806680494P": {
+    "scenario": "not_as_described",
+    "order": {
+      "order_id": "KL-170838",
+      "paypal_order_id": "8BW25594MF918784V",
+      "placed": "2026-11-11T11:23:06.497Z",
+      "items": [
+        {
+          "title": "Handwoven silk stole – rose pink",
+          "price": 18,
+          "cost": 6,
+          "description": "Handwoven on traditional looms. Natural dyes – colour may vary slightly from photos.",
+          "listing_url": "https://kanchilooms.example/p/not_as_described"
+        }
+      ],
+      "ship_to": "2211 N First St, San Jose, CA, 95131, US",
+      "bill_to": "2211 N First St, San Jose, CA, 95131, US"
+    },
+    "shipping": {
+      "carrier": "India Post EMS",
+      "tracking_number": "EE413664288IN",
+      "shipped": "2026-10-30T11:23:06.497Z",
+      "delivered": "2026-11-08T11:23:06.497Z",
+      "events": [
+        [
+          "Booked – Chennai GPO",
+          -12
+        ],
+        [
+          "Delivered",
+          -3
+        ]
+      ]
+    },
+    "customer": {
+      "previous_orders": 0,
+      "customer_since": "2026-04-25T11:23:06.497Z"
+    },
+    "comms": [
+      [
+        "CUSTOMER",
+        -2,
+        "The stole is lovely quality but the pink is softer than I hoped."
+      ],
+      [
+        "MERCHANT",
+        -2,
+        "Natural dyes vary a little – happy to accept a return within 14 days."
+      ]
+    ],
+    "refunds": [],
+    "return_shipping_estimate": 28
+  }
+}
