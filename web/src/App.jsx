@@ -30,6 +30,12 @@ const STATUS = {
   RESOLVED: 'Closed',
 };
 
+const WAITING_ON_OTHERS = ['WAITING_FOR_BUYER_RESPONSE', 'UNDER_REVIEW'];
+const WAITING_TEXT = {
+  WAITING_FOR_BUYER_RESPONSE: "You've responded. PayPal is waiting for the buyer to reply, so there's nothing to do until they do.",
+  UNDER_REVIEW: "You've responded. PayPal is reviewing the case and will decide; there's nothing to do until then.",
+};
+
 function daysLeft(iso) {
   if (!iso) return null;
   return Math.ceil((new Date(iso) - Date.now()) / 86_400_000);
@@ -287,7 +293,9 @@ function CaseGrid({ rows, selectedId, onSelect, loading, loadingText, emptyText 
           <span className={`pill ${DECISION[p.value].cls}`}>{DECISION[p.value].label}</span>
           <span className="rec-win" title="Win chance">{Math.round(p.data.winProbability * 100)}%</span>
         </span>
-      ) : p.data.status === 'RESOLVED' ? <span className="muted">—</span> : <span className="muted">Not analyzed</span>),
+      ) : p.data.status === 'RESOLVED' ? <span className="muted">—</span>
+        : WAITING_ON_OTHERS.includes(p.data.status) ? <span className="muted">Responded</span>
+        : <span className="muted">Not analyzed</span>),
     },
     {
       field: 'status', headerName: 'Status', flex: 0.95, minWidth: 104,
@@ -501,6 +509,8 @@ function CaseFile({ id, onChange, notify, readOnly }) {
   if (!data) return err ? <div className="empty"><p>{err}</p></div> : <Skeleton />;
   const { row, dispute, context, analysis: a } = data;
   const resolved = row.status === 'RESOLVED';
+  // The merchant has already responded; the next move is the buyer's or PayPal's.
+  const waiting = WAITING_ON_OTHERS.includes(row.status);
   const d = daysLeft(row.dueDate);
 
   return (
@@ -514,7 +524,7 @@ function CaseFile({ id, onChange, notify, readOnly }) {
         </div>
         <div className="case-status">
           {resolved ? <span className={`outcome ${/SELLER/.test(row.outcome) ? 'won' : /PAYOUT/.test(row.outcome) ? 'settled' : 'lost'}`}>{outcomeLabel(row.outcome)}</span>
-            : <span className={d <= 2 ? 'due urgent' : 'due'}>{STATUS[row.status]}{d != null ? ` · ${d <= 0 ? 'due today' : `${d}d left`}` : ''}</span>}
+            : <span className={d != null && d <= 2 && !waiting ? 'due urgent' : 'due'}>{STATUS[row.status]}{d != null ? ` · ${d <= 0 ? 'due today' : `${d}d left`}` : ''}</span>}
         </div>
       </header>
 
@@ -527,7 +537,9 @@ function CaseFile({ id, onChange, notify, readOnly }) {
 
       {!a && !running && resolved && <ClosedSummary row={row} dispute={dispute} />}
 
-      {!a && !running && !resolved && (
+      {!a && !running && waiting && <WaitingSummary status={row.status} onReview={analyze} />}
+
+      {!a && !running && !resolved && !waiting && (
         <div className="cta-block">
           <p>The agent will pull this order's tracking, refunds and messages{context ? '' : ' (no store order is linked to this PayPal transaction yet, so it will work from the dispute alone)'}, check them against what PayPal needs for this claim, and draft your response.</p>
           <button className="primary big" onClick={analyze}>Build the case</button>
@@ -593,7 +605,7 @@ function CaseFile({ id, onChange, notify, readOnly }) {
                 <p className="viewonly-inline">View-only: this is a live PayPal sandbox dispute, so submitting is turned off on the public demo.</p>
                 <button className="ghost" onClick={analyze} disabled={running}>Re-run analysis</button>
               </div>
-            ) : !a.submitted && !resolved ? (
+            ) : !a.submitted && !resolved && !waiting ? (
               <>
                 <button className={`primary big ${DECISION[a.decision].cls}`} onClick={() => act(a.decision)} disabled={busy}>
                   {busy ? 'Sending to PayPal…' : a.decision === 'OFFER' ? `Send ${usd(a.offer?.amount, 2)} offer` : a.decision === 'ACCEPT' ? `Refund ${usd(row.amount, 2)}` : DECISION[a.decision].verb}
@@ -607,7 +619,7 @@ function CaseFile({ id, onChange, notify, readOnly }) {
               </>
             ) : (
               <div className="submitted">
-                <p>{a.submitted ? `${DECISION[a.submitted.action].done} on ${new Date(a.submitted.at).toLocaleString()}.` : 'This case is closed.'}</p>
+                <p>{a.submitted ? `${DECISION[a.submitted.action].done} on ${new Date(a.submitted.at).toLocaleString()}.` : waiting ? WAITING_TEXT[row.status] : 'This case is closed.'}</p>
                 {!resolved && (
                   <button className="ghost" onClick={simulate} disabled={busy}>Simulate PayPal's decision (sandbox)</button>
                 )}
@@ -759,6 +771,17 @@ function ClosedSummary({ row, dispute }) {
       <div className="closed-head">{headline}{when && <span>Closed {when}</span>}</div>
       <p>{detail}</p>
       <p className="closed-note">There's nothing left to respond to. Closed cases count towards your win rate at the top.</p>
+    </section>
+  );
+}
+
+// A case where the merchant has already responded: show where it stands instead of offering to start over.
+function WaitingSummary({ status, onReview }) {
+  return (
+    <section className="closed-card waiting">
+      <div className="closed-head">{STATUS[status]}</div>
+      <p>{WAITING_TEXT[status]}</p>
+      <button className="ghost" onClick={onReview}>Show the agent's analysis again</button>
     </section>
   );
 }

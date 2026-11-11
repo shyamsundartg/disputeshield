@@ -303,3 +303,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--blue); }
 /* Grid loading overlay */
 .grid-loading { display: inline-flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 14px; background: #fff; padding: 10px 16px; border-radius: 99px; box-shadow: var(--shadow); }
 .spinner.dark { color: var(--blue); }
+
+.closed-card.waiting { background: #f3f6fd; border-color: #d5def6; }
+.closed-card.waiting .closed-head { color: var(--blue); }
+.closed-card .ghost { margin-top: 14px; }
