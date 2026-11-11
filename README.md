@@ -4,6 +4,8 @@ An AI agent that defends small PayPal merchants against disputes.
 
 Small sellers lose disputes they should win, because they don't know what evidence PayPal wants or they miss the deadline. They also fight disputes they should just refund, and pay the fee on top. DisputeShield reads each PayPal dispute and pulls in the order, courier tracking, refunds and customer messages. It checks those against what PayPal needs for that claim type, then recommends **fight**, **offer a partial refund**, or **refund**, with the money math behind the call. One click executes the decision through the PayPal Disputes API.
 
+**Live demo:** https://disputeshield-px8o.onrender.com/ (no login; first load can take up to a minute on Render's free plan)
+
 Built by WorkAxis (Chennai) for the PayPal AI Hackathon 2026.
 
 ## What it does

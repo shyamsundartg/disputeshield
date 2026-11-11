@@ -21,8 +21,6 @@ Open PP-D-48219 (not as described): "And here a 25% partial refund beats both fi
 
 **1:55–2:00.** "DisputeShield: keep the money you earned, and refund the money you owe."
 
-## Devpost summary (paste-ready)
+## Devpost submission
 
-**DisputeShield** is an AI agent that handles PayPal disputes for small merchants. It reads each dispute through the PayPal Disputes API and pulls the order, courier tracking, refunds and customer messages. It checks them against PayPal's evidence requirements for that claim type, then recommends fighting, offering a partial refund, or refunding, with the expected cost of each option. The merchant reviews the drafted response and evidence pack, and one click executes the decision on PayPal (provide-evidence, make-offer or accept-claim). Webhooks trigger analysis the moment a dispute opens. The agent is deliberately honest: when the buyer is right, it says so.
-
-Built with: PayPal Disputes API, PayPal webhooks, Claude (Anthropic), AG Grid, React, Node.js.
+The full paste-ready Devpost text (pitch, description, links, testing notes) is in [SUBMISSION.md](SUBMISSION.md).
