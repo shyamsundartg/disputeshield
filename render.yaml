@@ -1,0 +1,15 @@
+# One-click deploy on Render's free plan (Blueprint).
+# Runs in demo mode: no PayPal or AI keys are stored on the server.
+services:
+  - type: web
+    name: disputeshield
+    runtime: node
+    plan: free
+    buildCommand: npm --prefix server install && npm --prefix web install --include=dev && npm --prefix web run build
+    startCommand: npm --prefix server start
+    healthCheckPath: /api/config
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DEMO_MODE
+        value: "true"

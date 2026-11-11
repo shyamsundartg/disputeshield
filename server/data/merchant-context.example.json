@@ -1,0 +1,23 @@
+{
+  "_comment": "Rename to merchant-context.json. Keys are PayPal seller_transaction_id values (or invoice numbers). The agent uses this to find tracking, refunds and customer messages for each dispute.",
+  "REPLACE_WITH_SANDBOX_TRANSACTION_ID": {
+    "order": {
+      "order_id": "KL-2001",
+      "placed": "2026-10-20T10:00:00Z",
+      "items": [{ "title": "Kanchipuram silk saree", "price": 120, "cost": 50, "description": "Handwoven. Natural dyes - colour may vary slightly." }],
+      "ship_to": "1 Main St, San Jose, CA 95131, US",
+      "bill_to": "1 Main St, San Jose, CA 95131, US"
+    },
+    "shipping": {
+      "carrier": "DHL",
+      "tracking_number": "1234567890",
+      "shipped": "2026-10-21T10:00:00Z",
+      "delivered": "2026-10-27T15:00:00Z",
+      "signed_by": "J. DOE",
+      "events": [["Picked up - Chennai, IN", -19], ["Delivered - signed by J. DOE", -13]]
+    },
+    "customer": { "previous_orders": 1, "customer_since": "2026-01-10T00:00:00Z" },
+    "comms": [["CUSTOMER", -18, "Thanks, excited for this!"]],
+    "refunds": []
+  }
+}
